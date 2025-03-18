@@ -1,0 +1,12 @@
+name: cardio-detect
+docker_env:
+  image: jedha/sample-mlflow-server
+  environment: [
+    "MLFLOW_TRACKING_URI",
+    "MLFLOW_EXPERIMENT_ID",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY"
+  ]
+entry_points:
+  main:
+    command: "python app/train.py"
