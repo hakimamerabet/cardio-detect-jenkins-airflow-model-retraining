@@ -76,11 +76,11 @@ def preprocess_data(df):
     df = df.drop(columns=['height', 'weight'])
 
     # Convert age to years if needed
-    if df["age"].mean() > 100:
-        df["age"] = (df["age"] / 365).round()
+    #if df["age"].mean() > 100:
+    #    df["age"] = (df["age"] / 365).round()
 
     # Modify gender: 1 -> 0, 2 -> 1
-    df["gender"] = df["gender"].replace({1: 0, 2: 1})
+    #df["gender"] = df["gender"].replace({1: 0, 2: 1})
 
     # Split the dataframe into X (features) and y (target)
     X = df.drop(columns=["cardio"])
@@ -180,24 +180,33 @@ def run_experiment(experiment_name, bucket_name, key, param_grid, artifact_path,
     df = load_data_from_s3(bucket_name, key)
     X_train, X_test, y_train, y_test = preprocess_data(df)
 
+    # Save training dataset to CSV
+    train_data_path = "train_data.csv"
+    pd.concat([X_train, y_train], axis=1).to_csv(train_data_path, index=False)
+
     # Create pipeline
     pipe = create_pipeline()
 
-    # Set experiment's info 
+    # Set experiment info
     mlflow.set_experiment(experiment_name)
-
-    # Get our experiment info
     experiment = mlflow.get_experiment_by_name(experiment_name)
 
     # Call mlflow autolog
     mlflow.sklearn.autolog()
 
     with mlflow.start_run(experiment_id=experiment.experiment_id):
-        # Train model
-        train_model(pipe, X_train, y_train, param_grid)
+        # Log the training dataset as an artifact
+        mlflow.log_artifact(train_data_path)
+
+        # Train model and capture the trained model
+        trained_model = train_model(pipe, X_train, y_train, param_grid)
+
+        # Log metrics and model to MLflow
+        log_metrics_and_model(trained_model, X_train, y_train, X_test, y_test, artifact_path, registered_model_name)
 
     # Print timing
     print(f"...Training Done! --- Total training time: {time.time() - start_time} seconds")
+
 
 # Entry point for the script
 if __name__ == "__main__":
@@ -205,7 +214,9 @@ if __name__ == "__main__":
     date_str = datetime.now().strftime("%Y%m%d")
     experiment_name = "cardio-detect"
     bucket_name = "projet-cardiodetect" 
-    key = f"new_cardio_train_{date_str}.csv"
+    #key = f"new_cardio_train_{date_str}.csv"
+    key = cardio_train.csv"
+    
 
     param_grid = {
         "Random_Forest__max_depth": [2, 4, 6, 8, 10],
