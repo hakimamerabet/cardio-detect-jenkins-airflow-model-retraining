@@ -11,7 +11,6 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from mlflow.models.signature import infer_signature
 
-
 # Load data from S3
 def load_data_from_s3(bucket_name, key):
     """
@@ -104,14 +103,14 @@ def create_pipeline():
 
     # Pipelines combination
     preprocessor = ColumnTransformer(
-        transformers=[
+        transformers=[ 
             ('num', numeric_transformer, numeric_features),
             ('cat', categorical_transformer, categorical_features)
         ]
     )
 
     # Machine learning pipeline with RandomForestClassifier
-    return Pipeline(steps=[
+    return Pipeline(steps=[ 
         ("Preprocessing", preprocessor),
         ("Random_Forest", RandomForestClassifier()) 
     ])
@@ -138,7 +137,7 @@ def train_model(pipe, X_train, y_train, param_grid, cv=2, n_jobs=-1, verbose=3):
     return model
 
 # Log metrics and model to MLflow
-def log_metrics_and_model(model, X_train, y_train, X_test, y_test, artifact_path, registered_model_name):
+def log_metrics_and_model(model, X_train, y_train, X_test, y_test, artifact_path, registered_model_name, df):
     """
     Log training and test metrics, and the model to MLflow.
 
@@ -153,6 +152,11 @@ def log_metrics_and_model(model, X_train, y_train, X_test, y_test, artifact_path
     """
     mlflow.log_metric("Train Score", model.score(X_train, y_train))
     mlflow.log_metric("Test Score", model.score(X_test, y_test))
+
+    # Log the dataset as an artifact
+    df.to_csv("cardio_train.csv", index=False)
+    mlflow.log_artifact("cardio_train.csv")
+
     mlflow.sklearn.log_model(
         sk_model=model,
         artifact_path=artifact_path,
@@ -193,7 +197,10 @@ def run_experiment(experiment_name, bucket_name, key, param_grid, artifact_path,
 
     with mlflow.start_run(experiment_id=experiment.experiment_id):
         # Train model
-        train_model(pipe, X_train, y_train, param_grid)
+        model = train_model(pipe, X_train, y_train, param_grid)
+
+        # Log metrics and model to MLflow
+        log_metrics_and_model(model, X_train, y_train, X_test, y_test, artifact_path, registered_model_name, df)
 
     # Print timing
     print(f"...Training Done! --- Total training time: {time.time() - start_time} seconds")
