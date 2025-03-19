@@ -11,6 +11,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from mlflow.models.signature import infer_signature
 
+
 # Load data from S3
 def load_data_from_s3(bucket_name, key):
     """
@@ -28,10 +29,10 @@ def load_data_from_s3(bucket_name, key):
     # Download the file from S3 into memory
     obj = s3_client.get_object(Bucket=bucket_name, Key=key)
     data = obj['Body'].read().decode('utf-8')
-
+    
     # Read the data into a pandas DataFrame
     df = pd.read_csv(StringIO(data), sep=';')
-
+    
     return df
 
 # Preprocess data
@@ -83,7 +84,7 @@ def preprocess_data(df):
     # Split the dataframe into X (features) and y (target)
     X = df.drop(columns=["cardio"])
     y = df["cardio"]
-
+    
     return train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
 # Create the pipeline
@@ -112,7 +113,7 @@ def create_pipeline():
     # Machine learning pipeline with RandomForestClassifier
     return Pipeline(steps=[
         ("Preprocessing", preprocessor),
-        ("Random_Forest", RandomForestClassifier())
+        ("Random_Forest", RandomForestClassifier()) 
     ])
 
 # Train model
@@ -137,7 +138,7 @@ def train_model(pipe, X_train, y_train, param_grid, cv=2, n_jobs=-1, verbose=3):
     return model
 
 # Log metrics and model to MLflow
-def log_metrics_and_model(model, X_train, y_train, X_test, y_test, artifact_path, registered_model_name, dataset_path):
+def log_metrics_and_model(model, X_train, y_train, X_test, y_test, artifact_path, registered_model_name):
     """
     Log training and test metrics, and the model to MLflow.
 
@@ -149,11 +150,9 @@ def log_metrics_and_model(model, X_train, y_train, X_test, y_test, artifact_path
         y_test (pd.Series): Test target.
         artifact_path (str): Path to store the model artifact.
         registered_model_name (str): Name to register the model under in MLflow.
-        dataset_path (str): Path to the dataset file to log as an artifact.
     """
     mlflow.log_metric("Train Score", model.score(X_train, y_train))
     mlflow.log_metric("Test Score", model.score(X_test, y_test))
-    mlflow.log_artifact(dataset_path, artifact_path=artifact_path)
     mlflow.sklearn.log_model(
         sk_model=model,
         artifact_path=artifact_path,
@@ -180,14 +179,10 @@ def run_experiment(experiment_name, bucket_name, key, param_grid, artifact_path,
     df = load_data_from_s3(bucket_name, key)
     X_train, X_test, y_train, y_test = preprocess_data(df)
 
-    # Save the dataset to a local file
-    dataset_path = "train_cardio.csv"
-    df.to_csv(dataset_path, index=False)
-
     # Create pipeline
     pipe = create_pipeline()
 
-    # Set experiment's info
+    # Set experiment's info 
     mlflow.set_experiment(experiment_name)
 
     # Get our experiment info
@@ -198,10 +193,7 @@ def run_experiment(experiment_name, bucket_name, key, param_grid, artifact_path,
 
     with mlflow.start_run(experiment_id=experiment.experiment_id):
         # Train model
-        model = train_model(pipe, X_train, y_train, param_grid)
-
-        # Log metrics and model
-        log_metrics_and_model(model, X_train, y_train, X_test, y_test, artifact_path, registered_model_name, dataset_path)
+        train_model(pipe, X_train, y_train, param_grid)
 
     # Print timing
     print(f"...Training Done! --- Total training time: {time.time() - start_time} seconds")
@@ -210,8 +202,8 @@ def run_experiment(experiment_name, bucket_name, key, param_grid, artifact_path,
 if __name__ == "__main__":
     # Define experiment parameters
     experiment_name = "cardio-detect"
-    bucket_name = "projet-cardiodetect"
-    key = "train_cardio.csv"  # Correct S3 key for the dataset
+    bucket_name = "projet-cardiodetect" 
+    key = "cardio_train.csv"
 
     param_grid = {
         "Random_Forest__max_depth": [2, 4, 6, 8, 10],
