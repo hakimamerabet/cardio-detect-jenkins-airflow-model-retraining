@@ -74,11 +74,11 @@ def preprocess_data(df):
     df = df.drop(columns=['height', 'weight'])
 
     # Convert age to years if needed
-    if df["age"].mean() > 100:
-        df["age"] = (df["age"] / 365).round()
+    #if df["age"].mean() > 100:
+    #    df["age"] = (df["age"] / 365).round()
 
     # Modify gender: 1 -> 0, 2 -> 1
-    df["gender"] = df["gender"].replace({1: 0, 2: 1})
+    #df["gender"] = df["gender"].replace({1: 0, 2: 1})
 
     # Split the dataframe into X (features) and y (target)
     X = df.drop(columns=["cardio"])
