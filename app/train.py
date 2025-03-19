@@ -9,9 +9,7 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
-from mlflow.models.signature import infer_signature
 from datetime import datetime
-
 
 # Load data from S3
 def load_data_from_s3(bucket_name, key):
@@ -51,7 +49,7 @@ def preprocess_data(df):
     df = df.dropna()
 
     # Drop ID column
-    df = df.drop(columns=["id"])
+    df = df.drop(columns=["id"], errors="ignore")
 
     # Drop duplicates
     df = df.drop_duplicates()
@@ -75,13 +73,6 @@ def preprocess_data(df):
     # Drop weight and height columns
     df = df.drop(columns=['height', 'weight'])
 
-    # Convert age to years if needed
-    #if df["age"].mean() > 100:
-    #    df["age"] = (df["age"] / 365).round()
-
-    # Modify gender: 1 -> 0, 2 -> 1
-    #df["gender"] = df["gender"].replace({1: 0, 2: 1})
-
     # Split the dataframe into X (features) and y (target)
     X = df.drop(columns=["cardio"])
     y = df["cardio"]
@@ -91,28 +82,23 @@ def preprocess_data(df):
 # Create the pipeline
 def create_pipeline():
     # Preprocessing
-    # Categorical variables pipeline
     categorical_features = ['gluc', 'cholesterol']
-    categorical_transformer = Pipeline(
-        steps=[('encoder', OneHotEncoder(drop='first'))]  # OneHotEncoder for categorical features
-    )
+    categorical_transformer = Pipeline([
+        ('encoder', OneHotEncoder(drop='first'))  
+    ])
 
-    # Quantitative variables pipeline
     numeric_features = ['age', 'ap_hi', 'ap_lo', 'bmi']
-    numeric_transformer = Pipeline(
-        steps=[('scaler', StandardScaler())]  # StandardScaler for numeric features
-    )
+    numeric_transformer = Pipeline([
+        ('scaler', StandardScaler())  
+    ])
 
-    # Pipelines combination
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ('num', numeric_transformer, numeric_features),
-            ('cat', categorical_transformer, categorical_features)
-        ]
-    )
+    preprocessor = ColumnTransformer([
+        ('num', numeric_transformer, numeric_features),
+        ('cat', categorical_transformer, categorical_features)
+    ])
 
     # Machine learning pipeline with RandomForestClassifier
-    return Pipeline(steps=[
+    return Pipeline([
         ("Preprocessing", preprocessor),
         ("Random_Forest", RandomForestClassifier()) 
     ])
@@ -142,39 +128,28 @@ def train_model(pipe, X_train, y_train, param_grid, cv=2, n_jobs=-1, verbose=3):
 def log_metrics_and_model(model, X_train, y_train, X_test, y_test, artifact_path, registered_model_name):
     """
     Log training and test metrics, and the model to MLflow.
-
-    Args:
-        model (GridSearchCV): The trained model.
-        X_train (pd.DataFrame): Training features.
-        y_train (pd.Series): Training target.
-        X_test (pd.DataFrame): Test features.
-        y_test (pd.Series): Test target.
-        artifact_path (str): Path to store the model artifact.
-        registered_model_name (str): Name to register the model under in MLflow.
     """
+    print("Logging metrics...")
     mlflow.log_metric("Train Score", model.score(X_train, y_train))
     mlflow.log_metric("Test Score", model.score(X_test, y_test))
+
+    print("Logging model...")
     mlflow.sklearn.log_model(
-        sk_model=model,
+        sk_model=model.best_estimator_,
         artifact_path=artifact_path,
         registered_model_name=registered_model_name
     )
+    print("Model logged successfully!")
 
 # Main function to execute the workflow
 def run_experiment(experiment_name, bucket_name, key, param_grid, artifact_path, registered_model_name):
     """
     Run the entire ML experiment pipeline.
-
-    Args:
-        experiment_name (str): Name of the MLflow experiment.
-        bucket_name (str): S3 bucket name where the dataset is stored.
-        key (str): S3 key (file path in the bucket).
-        param_grid (dict): The hyperparameter grid for GridSearchCV.
-        artifact_path (str): Path to store the model artifact.
-        registered_model_name (str): Name to register the model under in MLflow.
     """
-    # Start timing
     start_time = time.time()
+
+    # Print MLflow tracking URI
+    print("MLflow Tracking URI:", mlflow.get_tracking_uri())
 
     # Load and preprocess data
     df = load_data_from_s3(bucket_name, key)
@@ -187,36 +162,30 @@ def run_experiment(experiment_name, bucket_name, key, param_grid, artifact_path,
     # Create pipeline
     pipe = create_pipeline()
 
-    # Set experiment info
+    # Set experiment
     mlflow.set_experiment(experiment_name)
     experiment = mlflow.get_experiment_by_name(experiment_name)
 
-    # Call mlflow autolog
+    if experiment is None:
+        raise ValueError(f"Experiment '{experiment_name}' was not created successfully.")
+
     mlflow.sklearn.autolog()
 
     with mlflow.start_run(experiment_id=experiment.experiment_id):
-        # Log the training dataset as an artifact
         mlflow.log_artifact(train_data_path)
 
-        # Train model and capture the trained model
         trained_model = train_model(pipe, X_train, y_train, param_grid)
 
-        # Log metrics and model to MLflow
         log_metrics_and_model(trained_model, X_train, y_train, X_test, y_test, artifact_path, registered_model_name)
 
-    # Print timing
     print(f"...Training Done! --- Total training time: {time.time() - start_time} seconds")
-
 
 # Entry point for the script
 if __name__ == "__main__":
-    # Define experiment parameters
     date_str = datetime.now().strftime("%Y%m%d")
     experiment_name = "cardio-detect"
-    bucket_name = "projet-cardiodetect" 
-    #key = f"new_cardio_train_{date_str}.csv"
-    key = cardio_train.csv"
-    
+    bucket_name = "projet-cardiodetect"
+    key = "cardio_train.csv"
 
     param_grid = {
         "Random_Forest__max_depth": [2, 4, 6, 8, 10],
@@ -227,5 +196,4 @@ if __name__ == "__main__":
     artifact_path = "modeling_cardiodetect"
     registered_model_name = "random_forest"
 
-    # Run the experiment
     run_experiment(experiment_name, bucket_name, key, param_grid, artifact_path, registered_model_name)
