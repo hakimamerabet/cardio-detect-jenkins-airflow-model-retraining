@@ -137,7 +137,7 @@ def train_model(pipe, X_train, y_train, param_grid, cv=2, n_jobs=-1, verbose=3):
     return model
 
 # Log metrics and model to MLflow
-def log_metrics_and_model(model, X_train, y_train, X_test, y_test, artifact_path, registered_model_name, df):
+def log_metrics_and_model(model, X_train, y_train, X_test, y_test, artifact_path, registered_model_name, s3_file_path):
     """
     Log training and test metrics, and the model to MLflow.
 
@@ -149,14 +149,15 @@ def log_metrics_and_model(model, X_train, y_train, X_test, y_test, artifact_path
         y_test (pd.Series): Test target.
         artifact_path (str): Path to store the model artifact.
         registered_model_name (str): Name to register the model under in MLflow.
+        s3_file_path (str): The S3 file path to the dataset.
     """
     mlflow.log_metric("Train Score", model.score(X_train, y_train))
     mlflow.log_metric("Test Score", model.score(X_test, y_test))
 
-    # Log the dataset as an artifact
-    df.to_csv("cardio_train.csv", index=False)
-    mlflow.log_artifact("cardio_train.csv")
+    # Log the dataset S3 file path as an artifact
+    mlflow.log_param("S3_Dataset", s3_file_path)
 
+    # Log the model
     mlflow.sklearn.log_model(
         sk_model=model,
         artifact_path=artifact_path,
@@ -200,7 +201,8 @@ def run_experiment(experiment_name, bucket_name, key, param_grid, artifact_path,
         model = train_model(pipe, X_train, y_train, param_grid)
 
         # Log metrics and model to MLflow
-        log_metrics_and_model(model, X_train, y_train, X_test, y_test, artifact_path, registered_model_name, df)
+        s3_file_path = f"s3://{bucket_name}/{key}"
+        log_metrics_and_model(model, X_train, y_train, X_test, y_test, artifact_path, registered_model_name, s3_file_path)
 
     # Print timing
     print(f"...Training Done! --- Total training time: {time.time() - start_time} seconds")
